@@ -9,4 +9,4 @@ statsmodels
 arch
 scikit-learn
 xgboost
-tensonflow-cpu
+tensonflow
