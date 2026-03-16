@@ -11,10 +11,6 @@ from arch import arch_model
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error
-from sklearn.preprocessing import MinMaxScaler
-
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
 
 st.set_page_config(page_title="Financial Forecasting Dashboard", layout="wide")
 
@@ -35,6 +31,7 @@ if st.sidebar.button("Load Data"):
         st.error("No data found. Please check the stock symbol.")
         st.stop()
 
+    # Candlestick chart
     st.subheader("Candlestick Chart")
 
     fig = go.Figure(data=[go.Candlestick(
@@ -45,8 +42,9 @@ if st.sidebar.button("Load Data"):
         close=data['Close']
     )])
 
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, use_container_width=True)
 
+    # Returns and lag features
     data["Returns"] = np.log(data["Close"] / data["Close"].shift(1))
     data["Lag1"] = data["Returns"].shift(1)
     data["Lag2"] = data["Returns"].shift(2)
@@ -79,6 +77,7 @@ if st.sidebar.button("Load Data"):
     y_test = test["Returns"]
 
     rf = RandomForestRegressor(n_estimators=100, random_state=42)
+
     rf.fit(X_train, y_train)
 
     rf_pred = rf.predict(X_test)
@@ -94,44 +93,7 @@ if st.sidebar.button("Load Data"):
 
     results["XGBoost"] = np.sqrt(mean_squared_error(y_test, xgb_pred))
 
-    # LSTM
-    scaler = MinMaxScaler()
-
-    scaled_returns = scaler.fit_transform(data["Returns"].values.reshape(-1,1))
-
-    seq_length = 5
-    X_lstm = []
-    y_lstm = []
-
-    for i in range(seq_length, len(scaled_returns)):
-        X_lstm.append(scaled_returns[i-seq_length:i])
-        y_lstm.append(scaled_returns[i])
-
-    X_lstm = np.array(X_lstm)
-    y_lstm = np.array(y_lstm)
-
-    split_lstm = int(len(X_lstm)*0.8)
-
-    X_train_lstm = X_lstm[:split_lstm]
-    X_test_lstm = X_lstm[split_lstm:]
-
-    y_train_lstm = y_lstm[:split_lstm]
-    y_test_lstm = y_lstm[split_lstm:]
-
-    model = Sequential()
-    model.add(LSTM(50, input_shape=(X_train_lstm.shape[1],1)))
-    model.add(Dense(1))
-
-    model.compile(optimizer="adam", loss="mse")
-
-    model.fit(X_train_lstm, y_train_lstm, epochs=10, batch_size=16, verbose=0)
-
-    lstm_pred = model.predict(X_test_lstm)
-
-    lstm_rmse = np.sqrt(mean_squared_error(y_test_lstm, lstm_pred))
-
-    results["LSTM"] = lstm_rmse
-
+    # Results table
     results_df = pd.DataFrame(list(results.items()), columns=["Model","RMSE"])
 
     st.table(results_df)
@@ -139,14 +101,14 @@ if st.sidebar.button("Load Data"):
     # Model comparison chart
     st.subheader("Model Performance Comparison")
 
-    fig3 = go.Figure()
+    fig2 = go.Figure()
 
-    fig3.add_bar(
+    fig2.add_bar(
         x=results_df["Model"],
         y=results_df["RMSE"]
     )
 
-    st.plotly_chart(fig3)
+    st.plotly_chart(fig2, use_container_width=True)
 
     # Volatility heatmap
     st.subheader("Volatility Heatmap")
@@ -155,13 +117,13 @@ if st.sidebar.button("Load Data"):
 
     vol = data["Volatility"].dropna()
 
-    fig2, ax = plt.subplots()
+    fig3, ax = plt.subplots()
 
     sns.heatmap(vol.to_frame().T, cmap="coolwarm", cbar=True)
 
-    st.pyplot(fig2)
+    st.pyplot(fig3)
 
-    # GARCH volatility
+    # GARCH volatility forecast
     st.subheader("GARCH Volatility Forecast")
 
     returns = train["Returns"] * 100
