@@ -13,46 +13,81 @@ from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 from sklearn.metrics import mean_squared_error
 
-st.set_page_config(page_title="Financial Forecasting Dashboard", layout="wide")
+# ---------------------------------------------------------
+# Page Config
+# ---------------------------------------------------------
 
-st.title("📈 Stock Return & Volatility Forecasting Dashboard")
+st.set_page_config(
+    page_title="Financial Market Forecasting Dashboard",
+    layout="wide",
+    page_icon="📈"
+)
 
-st.sidebar.header("User Input")
+st.title("📈 Financial Market Forecasting Dashboard")
+
+st.markdown(
+"""
+This dashboard analyzes **stock returns and volatility** using  
+statistical models and machine learning algorithms.
+
+Models Included:
+
+• ARIMA  
+• Random Forest  
+• XGBoost  
+• GARCH Volatility Model
+"""
+)
+
+# ---------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------
+
+st.sidebar.header("Dashboard Controls")
 
 ticker = st.sidebar.text_input("Stock Symbol", "^NSEI")
 
 start = st.sidebar.date_input("Start Date", pd.to_datetime("2015-01-01"))
 end = st.sidebar.date_input("End Date", pd.to_datetime("2025-01-01"))
 
-if st.sidebar.button("Load Data"):
+load_data = st.sidebar.button("Load Market Data")
+
+# ---------------------------------------------------------
+# Main App
+# ---------------------------------------------------------
+
+if load_data:
 
     with st.spinner("Fetching data and training models..."):
 
         data = yf.download(ticker, start=start, end=end)
 
         if data.empty:
-            st.error("No data found. Please check the stock symbol.")
+            st.error("No data found.")
             st.stop()
 
-        # -------------------------------------------------------
-        # Candlestick Chart
-        # -------------------------------------------------------
+        # -----------------------------------------------------
+        # Price Chart
+        # -----------------------------------------------------
 
-        st.subheader("📊 Stock Price Candlestick Chart")
+        st.subheader("📊 Market Price Chart")
 
-        fig = go.Figure(data=[go.Candlestick(
+        fig = go.Figure()
+
+        fig.add_trace(go.Candlestick(
             x=data.index,
-            open=data['Open'],
-            high=data['High'],
-            low=data['Low'],
-            close=data['Close']
-        )])
+            open=data["Open"],
+            high=data["High"],
+            low=data["Low"],
+            close=data["Close"],
+            name="Price"
+        ))
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # -------------------------------------------------------
+        # -----------------------------------------------------
         # Feature Engineering
-        # -------------------------------------------------------
+        # -----------------------------------------------------
 
         data["Returns"] = np.log(data["Close"] / data["Close"].shift(1))
         data["Lag1"] = data["Returns"].shift(1)
@@ -65,15 +100,16 @@ if st.sidebar.button("Load Data"):
         train = data.iloc[:split]
         test = data.iloc[split:]
 
-        # -------------------------------------------------------
-        # Model Comparison
-        # -------------------------------------------------------
+        # -----------------------------------------------------
+        # Model Training
+        # -----------------------------------------------------
 
-        st.subheader("🤖 Model Comparison")
+        st.subheader("🤖 Model Performance")
 
         results = {}
 
-        # ARIMA on RETURNS
+        # ARIMA
+
         arima = ARIMA(train["Returns"], order=(1,0,1)).fit()
 
         arima_pred = arima.forecast(steps=len(test))
@@ -91,48 +127,100 @@ if st.sidebar.button("Load Data"):
         y_test = test["Returns"]
 
         rf = RandomForestRegressor(n_estimators=100, random_state=42)
+
         rf.fit(X_train, y_train)
 
         rf_pred = rf.predict(X_test)
 
         rf_rmse = np.sqrt(mean_squared_error(y_test, rf_pred))
+
         results["Random Forest"] = rf_rmse
 
         # XGBoost
 
         xgb = XGBRegressor(n_estimators=100, random_state=42)
+
         xgb.fit(X_train, y_train)
 
         xgb_pred = xgb.predict(X_test)
 
         xgb_rmse = np.sqrt(mean_squared_error(y_test, xgb_pred))
+
         results["XGBoost"] = xgb_rmse
 
-        results_df = pd.DataFrame(list(results.items()), columns=["Model","RMSE"])
+        results_df = pd.DataFrame(
+            list(results.items()),
+            columns=["Model","RMSE"]
+        )
 
-        st.table(results_df)
+        st.dataframe(results_df)
 
-        # -------------------------------------------------------
+        # -----------------------------------------------------
         # Model Comparison Chart
-        # -------------------------------------------------------
-
-        st.subheader("📉 Model Performance Comparison")
+        # -----------------------------------------------------
 
         fig3 = px.bar(
             results_df,
             x="Model",
             y="RMSE",
             color="Model",
-            title="RMSE Comparison of Forecasting Models"
+            title="Model Performance Comparison"
         )
 
         st.plotly_chart(fig3, use_container_width=True)
 
-        # -------------------------------------------------------
-        # Volatility Calculation
-        # -------------------------------------------------------
+        # -----------------------------------------------------
+        # Actual vs Predicted (ARIMA)
+        # -----------------------------------------------------
+
+        st.subheader("📉 Actual vs Predicted Returns")
+
+        fig_pred = go.Figure()
+
+        fig_pred.add_trace(
+            go.Scatter(
+                x=test.index,
+                y=test["Returns"],
+                mode="lines",
+                name="Actual Returns"
+            )
+        )
+
+        fig_pred.add_trace(
+            go.Scatter(
+                x=arima_pred.index,
+                y=arima_pred,
+                mode="lines",
+                name="ARIMA Prediction"
+            )
+        )
+
+        st.plotly_chart(fig_pred, use_container_width=True)
+
+        # -----------------------------------------------------
+        # Rolling Volatility
+        # -----------------------------------------------------
+
+        st.subheader("📊 Rolling Market Volatility")
 
         data["Volatility"] = data["Returns"].rolling(20).std()
+
+        fig_vol = go.Figure()
+
+        fig_vol.add_trace(
+            go.Scatter(
+                x=data.index,
+                y=data["Volatility"],
+                mode="lines",
+                name="Rolling Volatility"
+            )
+        )
+
+        st.plotly_chart(fig_vol, use_container_width=True)
+
+        # -----------------------------------------------------
+        # Volatility Heatmap
+        # -----------------------------------------------------
 
         st.subheader("🔥 Monthly Volatility Heatmap")
 
@@ -159,19 +247,18 @@ if st.sidebar.button("Load Data"):
             heatmap_data,
             cmap="coolwarm",
             annot=True,
-            fmt=".3f",
-            linewidths=.5
+            fmt=".3f"
         )
 
         ax.set_title("Average Monthly Volatility")
 
         st.pyplot(fig2)
 
-        # -------------------------------------------------------
-        # GARCH Volatility Forecast
-        # -------------------------------------------------------
+        # -----------------------------------------------------
+        # GARCH Forecast
+        # -----------------------------------------------------
 
-        st.subheader("⚡ Next Day Volatility Forecast (GARCH)")
+        st.subheader("⚡ Next-Day Volatility Forecast")
 
         returns = train["Returns"] * 100
 
@@ -183,4 +270,7 @@ if st.sidebar.button("Load Data"):
 
         vol_pred = np.sqrt(forecast.variance.values[-1,0])
 
-        st.metric("Predicted Next Day Volatility", round(vol_pred,4))
+        st.metric(
+            label="Predicted Next-Day Volatility",
+            value=round(vol_pred,4)
+        )
