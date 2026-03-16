@@ -93,7 +93,7 @@ Streamlit
 Clone the repository
 
 ```
-git clone https://github.com/yourusername/financial-market-forecasting.git
+https://github.com/meaninditadeb2-eng/financial-forecasting-dashboard.git
 ```
 
 Navigate to the project folder
