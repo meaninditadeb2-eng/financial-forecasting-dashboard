@@ -10,7 +10,7 @@ The goal is to forecast **stock returns and market volatility** while comparing 
 
 Streamlit App:
 
-https://your-streamlit-app-url.streamlit.app
+https://financial-forecasting-dashboard-nxcn5sxpq89tax2qhzx5tw.streamlit.app/
 
 Users can explore stock data, run forecasting models, and visualize volatility patterns in real time.
 
