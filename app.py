@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -14,7 +15,7 @@ from sklearn.metrics import mean_squared_error
 
 st.set_page_config(page_title="Financial Forecasting Dashboard", layout="wide")
 
-st.title("Stock Return & Volatility Forecasting Dashboard")
+st.title("📈 Stock Return & Volatility Forecasting Dashboard")
 
 st.sidebar.header("User Input")
 
@@ -25,115 +26,161 @@ end = st.sidebar.date_input("End Date", pd.to_datetime("2025-01-01"))
 
 if st.sidebar.button("Load Data"):
 
-    data = yf.download(ticker, start=start, end=end)
+    with st.spinner("Fetching data and training models..."):
 
-    if data.empty:
-        st.error("No data found. Please check the stock symbol.")
-        st.stop()
+        data = yf.download(ticker, start=start, end=end)
 
-    # Candlestick chart
-    st.subheader("Candlestick Chart")
+        if data.empty:
+            st.error("No data found. Please check the stock symbol.")
+            st.stop()
 
-    fig = go.Figure(data=[go.Candlestick(
-        x=data.index,
-        open=data['Open'],
-        high=data['High'],
-        low=data['Low'],
-        close=data['Close']
-    )])
+        # -------------------------------------------------------
+        # Candlestick Chart
+        # -------------------------------------------------------
 
-    st.plotly_chart(fig, use_container_width=True)
+        st.subheader("📊 Stock Price Candlestick Chart")
 
-    # Returns and lag features
-    data["Returns"] = np.log(data["Close"] / data["Close"].shift(1))
-    data["Lag1"] = data["Returns"].shift(1)
-    data["Lag2"] = data["Returns"].shift(2)
+        fig = go.Figure(data=[go.Candlestick(
+            x=data.index,
+            open=data['Open'],
+            high=data['High'],
+            low=data['Low'],
+            close=data['Close']
+        )])
 
-    data.dropna(inplace=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-    split = int(len(data) * 0.8)
+        # -------------------------------------------------------
+        # Feature Engineering
+        # -------------------------------------------------------
 
-    train = data.iloc[:split]
-    test = data.iloc[split:]
+        data["Returns"] = np.log(data["Close"] / data["Close"].shift(1))
+        data["Lag1"] = data["Returns"].shift(1)
+        data["Lag2"] = data["Returns"].shift(2)
 
-    st.subheader("Model Comparison")
+        data.dropna(inplace=True)
 
-    results = {}
+        split = int(len(data) * 0.8)
 
-    # ARIMA
-    arima = ARIMA(train["Close"], order=(1,1,1)).fit()
+        train = data.iloc[:split]
+        test = data.iloc[split:]
 
-    arima_pred = arima.forecast(steps=len(test))
-    arima_pred.index = test.index
+        # -------------------------------------------------------
+        # Model Comparison
+        # -------------------------------------------------------
 
-    arima_rmse = np.sqrt(mean_squared_error(test["Close"], arima_pred))
-    results["ARIMA"] = arima_rmse
+        st.subheader("🤖 Model Comparison")
 
-    # Random Forest
-    X_train = train[["Lag1","Lag2"]]
-    y_train = train["Returns"]
+        results = {}
 
-    X_test = test[["Lag1","Lag2"]]
-    y_test = test["Returns"]
+        # ARIMA on RETURNS
+        arima = ARIMA(train["Returns"], order=(1,0,1)).fit()
 
-    rf = RandomForestRegressor(n_estimators=100, random_state=42)
+        arima_pred = arima.forecast(steps=len(test))
+        arima_pred.index = test.index
 
-    rf.fit(X_train, y_train)
+        arima_rmse = np.sqrt(mean_squared_error(test["Returns"], arima_pred))
+        results["ARIMA"] = arima_rmse
 
-    rf_pred = rf.predict(X_test)
+        # Random Forest
 
-    results["Random Forest"] = np.sqrt(mean_squared_error(y_test, rf_pred))
+        X_train = train[["Lag1","Lag2"]]
+        y_train = train["Returns"]
 
-    # XGBoost
-    xgb = XGBRegressor(n_estimators=100, random_state=42)
+        X_test = test[["Lag1","Lag2"]]
+        y_test = test["Returns"]
 
-    xgb.fit(X_train, y_train)
+        rf = RandomForestRegressor(n_estimators=100, random_state=42)
+        rf.fit(X_train, y_train)
 
-    xgb_pred = xgb.predict(X_test)
+        rf_pred = rf.predict(X_test)
 
-    results["XGBoost"] = np.sqrt(mean_squared_error(y_test, xgb_pred))
+        rf_rmse = np.sqrt(mean_squared_error(y_test, rf_pred))
+        results["Random Forest"] = rf_rmse
 
-    # Results table
-    results_df = pd.DataFrame(list(results.items()), columns=["Model","RMSE"])
+        # XGBoost
 
-    st.table(results_df)
+        xgb = XGBRegressor(n_estimators=100, random_state=42)
+        xgb.fit(X_train, y_train)
 
-    # Model comparison chart
-    st.subheader("Model Performance Comparison")
+        xgb_pred = xgb.predict(X_test)
 
-    fig2 = go.Figure()
+        xgb_rmse = np.sqrt(mean_squared_error(y_test, xgb_pred))
+        results["XGBoost"] = xgb_rmse
 
-    fig2.add_bar(
-        x=results_df["Model"],
-        y=results_df["RMSE"]
-    )
+        results_df = pd.DataFrame(list(results.items()), columns=["Model","RMSE"])
 
-    st.plotly_chart(fig2, use_container_width=True)
+        st.table(results_df)
 
-    # Volatility heatmap
-    st.subheader("Volatility Heatmap")
+        # -------------------------------------------------------
+        # Model Comparison Chart
+        # -------------------------------------------------------
 
-    data["Volatility"] = data["Returns"].rolling(20).std()
+        st.subheader("📉 Model Performance Comparison")
 
-    vol = data["Volatility"].dropna()
+        fig3 = px.bar(
+            results_df,
+            x="Model",
+            y="RMSE",
+            color="Model",
+            title="RMSE Comparison of Forecasting Models"
+        )
 
-    fig3, ax = plt.subplots()
+        st.plotly_chart(fig3, use_container_width=True)
 
-    sns.heatmap(vol.to_frame().T, cmap="coolwarm", cbar=True)
+        # -------------------------------------------------------
+        # Volatility Calculation
+        # -------------------------------------------------------
 
-    st.pyplot(fig3)
+        data["Volatility"] = data["Returns"].rolling(20).std()
 
-    # GARCH volatility forecast
-    st.subheader("GARCH Volatility Forecast")
+        st.subheader("🔥 Monthly Volatility Heatmap")
 
-    returns = train["Returns"] * 100
+        vol = data["Volatility"].dropna()
 
-    garch = arch_model(returns, vol="GARCH", p=1, q=1)
+        vol_df = pd.DataFrame({
+            "Date": vol.index,
+            "Volatility": vol.values
+        })
 
-    garch_fit = garch.fit(disp="off")
+        vol_df["Year"] = vol_df["Date"].dt.year
+        vol_df["Month"] = vol_df["Date"].dt.month
 
-    forecast = garch_fit.forecast(horizon=1)
+        heatmap_data = vol_df.pivot_table(
+            values="Volatility",
+            index="Year",
+            columns="Month",
+            aggfunc="mean"
+        )
 
-    vol_pred = np.sqrt(forecast.variance.values[-1,0])
+        fig2, ax = plt.subplots(figsize=(10,5))
 
-    st.metric("Next Day Volatility", round(vol_pred,4))
+        sns.heatmap(
+            heatmap_data,
+            cmap="coolwarm",
+            annot=True,
+            fmt=".3f",
+            linewidths=.5
+        )
+
+        ax.set_title("Average Monthly Volatility")
+
+        st.pyplot(fig2)
+
+        # -------------------------------------------------------
+        # GARCH Volatility Forecast
+        # -------------------------------------------------------
+
+        st.subheader("⚡ Next Day Volatility Forecast (GARCH)")
+
+        returns = train["Returns"] * 100
+
+        garch = arch_model(returns, vol="GARCH", p=1, q=1)
+
+        garch_fit = garch.fit(disp="off")
+
+        forecast = garch_fit.forecast(horizon=1)
+
+        vol_pred = np.sqrt(forecast.variance.values[-1,0])
+
+        st.metric("Predicted Next Day Volatility", round(vol_pred,4))
