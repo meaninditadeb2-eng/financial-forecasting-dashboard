@@ -64,7 +64,7 @@ financial-market-forecasting
 
 ## 📉 Dashboard Preview
 
-![Dashboard](images/dashboard.png)
+![Dashboard](Dashboard.png)
 
 ---
 
